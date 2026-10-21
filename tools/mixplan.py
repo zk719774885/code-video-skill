@@ -2,7 +2,7 @@
 music.json = {"total":60, "sections":[{"kind":"18","start":0,"dur":60,"music_gain":1}], "note":"guzheng|piano|marimba|bell|epiano|toy"}
 cues 里 sfx=='note' 的按 music.json 的 note 乐器发音。"""
 import json, sys, os
-sys.path.insert(0, os.path.join(os.environ.get('SY_STYLES') or os.path.join(os.environ.get('VIDEO_HOME') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'), 'sy-styles-20'), 'audio'))
+sys.path.insert(0, os.path.join(os.environ.get('SY_STYLES') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'engines', 'sy-styles-20'), 'audio'))
 import synth as S
 from synth import nm
 INST = {

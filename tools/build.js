@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// 通用构建：在项目目录执行 node ../aihub-common/build.js still 3 5 | clip a b [--mb N] | full [--mb N]
-// 项目目录需有 index.html、music.json（total、sections、note）；可选 render.args（如 --hwgpu）
+// 通用构建：在项目目录执行 node <技能目录>/tools/build.js still 3 5 | clip a b [--mb N] | full [--mb N]
+// 项目目录需有 index.html、music.json（name、total；纯合成配乐时再写 sections、note）；用成品配乐时另放 bgm.json；可选 render.args（如 --hwgpu）
 const { spawnSync } = require('child_process');
 const fs = require('fs'), path = require('path');
-const ROOT = process.cwd(), SY = process.env.SY_STYLES || path.join(process.env.VIDEO_HOME || path.join(__dirname, '..'), 'sy-styles-20');
+const ROOT = process.cwd(), SY = process.env.SY_STYLES || path.join(__dirname, '..', 'engines', 'sy-styles-20');
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 ? argv[i + 1] : d; };
 const args = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1] || '').startsWith('--'));
@@ -25,8 +25,12 @@ async function clip(a, b, name) {
   const fdir = path.join(ROOT, 'frames', name); fs.rmSync(fdir, { recursive: true, force: true });
   run('node', [path.join(SY, 'render.js'), HTML, 'x', ...extra, '--mb', opt('mb', '3'), '--from', String(a), '--to', String(b), '--frames', fdir]);
   await dumpCues();
-  fs.writeFileSync(out('music_plan.json'), JSON.stringify(MJ));
-  run('python', ['-X', 'utf8', path.join(__dirname, 'mixplan.py'), out('music_plan.json'), out('cues.json'), out('music.wav')]);
+  if (fs.existsSync(path.join(ROOT, 'bgm.json'))) {      // 成品配乐 + 动效音效
+    run('python', ['-X', 'utf8', path.join(__dirname, 'mixbgm.py'), path.join(ROOT, 'bgm.json'), out('cues.json'), out('music.wav')]);
+  } else {                                              // 纯代码合成配乐
+    fs.writeFileSync(out('music_plan.json'), JSON.stringify(MJ));
+    run('python', ['-X', 'utf8', path.join(__dirname, 'mixplan.py'), out('music_plan.json'), out('cues.json'), out('music.wav')]);
+  }
   const mp4 = out(`${name}.mp4`);
   run('ffmpeg', ['-y', '-v', 'error', '-framerate', '30', '-start_number', String(Math.round(a * 30)), '-i', path.join(fdir, 'f%05d.jpg'), '-ss', String(a), '-t', String(b - a), '-i', out('music.wav'),
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', '-shortest', '-movflags', '+faststart', mp4]);

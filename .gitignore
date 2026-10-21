@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 out/
 frames/
+node_modules/
+engines/sy-styles-20/out/
+engines/sy-styles-20/frames/
