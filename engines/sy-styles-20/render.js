@@ -20,7 +20,7 @@ const VW = Math.round(1920 * rs), VH = Math.round(1080 * rs);
   // --hwgpu: use the machine's real graphics card for WebGL (much faster on a desktop with a GPU); default is SwiftShader (works everywhere, slow)
   const GPU = argv.includes('--nogpu') ? ['--disable-gpu'] : argv.includes('--hwgpu') || process.env.HWGPU === '1' ? ['--ignore-gpu-blocklist', '--enable-gpu-rasterization'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
   const browser = await chromium.launch({
-    args: [...GPU, '--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb', '--hide-scrollbars'],
+    args: [...GPU, '--allow-file-access-from-files', '--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb', '--hide-scrollbars'],
   });
   const page = await browser.newPage({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1 });
   page.on('console', (m) => { if (m.type() === 'error') console.error('[page]', m.text()); });

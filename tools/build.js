@@ -15,7 +15,7 @@ const extra = fs.existsSync(path.join(ROOT, 'render.args')) ? fs.readFileSync(pa
 function run(cmd, a) { const r = spawnSync(cmd, a, { cwd: ROOT, stdio: 'inherit' }); if (r.status !== 0) { console.error(`${cmd} 失败（${r.status}）`); process.exit(1); } }
 async function dumpCues() {
   const { chromium } = require(path.join(SY, 'node_modules', 'playwright'));
-  const b = await chromium.launch({ args: ['--disable-gpu'] }); const p = await b.newPage();
+  const b = await chromium.launch({ args: ['--disable-gpu', '--allow-file-access-from-files'] }); const p = await b.newPage();
   await p.goto(require('url').pathToFileURL(HTML).href + '?render=1');
   await p.waitForFunction(() => typeof window.__seek === 'function');
   const cues = await p.evaluate(() => window.__cues); await b.close();

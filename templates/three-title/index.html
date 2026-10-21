@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Three.js 3D 片名模板</title>
+<!-- SY = sy-styles-20 引擎目录；tools/newproj.js 建项目时会自动替换成实际路径 -->
+<script src="SY/lib/core.js"></script><script src="SY/lib/three.min.js"></script><script src="SY/lib/three-reel.js"></script>
+<style>
+  #sub{position:absolute;left:0;right:0;top:950px;text-align:center;font:500 26px 'Noto Sans SC','Microsoft YaHei';letter-spacing:.8em;padding-left:.8em;color:#cfd6e4;opacity:0}
+</style>
+</head><body><div id="stage"><div id="sub">CINEMATIC · 3D TITLE</div></div>
+<script>
+/* Three.js 3D 片名模板（6 秒）：金属中文片名逐字从上方落下弹到镜面地板上，
+   三百颗粒子环绕，相机从低机位推近摇起，Drop 处光晕一闪。改 C.title / C.sub 即可复用。 */
+const { E, clamp, inv, lerp, spring, rng } = Reel;
+const stage = Reel.makeStage('#07080c');
+const C = Reel.cfg({ title: '代码造片', sub: 'CINEMATIC · 3D TITLE', drop: 3.0 });
+document.getElementById('sub').textContent = C.sub;
+
+const R3 = Reel.three(stage, { bg: '#07080c', fov: 30, exposure: 1.05, bloom: { strength: 0.35, radius: 0.45, threshold: 0.92 } });
+const { scene, camera } = R3;   // THREE 是全局变量，别再解构声明
+scene.fog = new THREE.Fog('#07080c', 9, 24);
+
+// 地板：深色高光，接住倒影。注意掠射角会反射整个环境光照而发灰，所以显式给 envMap 并压低 envMapIntensity
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: '#0a0b10', metalness: 0.6, roughness: 0.32, envMap: scene.environment, envMapIntensity: 0.08 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const key = new THREE.DirectionalLight('#fff3dc', 2.4); key.position.set(4, 9, 6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = -8; key.shadow.camera.right = 8; key.shadow.camera.top = 6; key.shadow.camera.bottom = -2; key.shadow.bias = -0.0004;
+scene.add(key);
+const rim = new THREE.PointLight('#5aa8ff', 0, 30); rim.position.set(0, 2.5, -4); scene.add(rim);
+
+// 粒子环：InstancedMesh，一次画几百个
+const N = 320, rnd = rng(7);
+const parts = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.035), new THREE.MeshStandardMaterial({ color: '#ffd28a', emissive: '#ffb347', emissiveIntensity: 1.6 }), N);
+const P = Array.from({ length: N }, () => ({ r: 3.2 + rnd() * 3, a: rnd() * Math.PI * 2, y: 0.2 + rnd() * 2.6, s: 0.15 + rnd() * 0.35 }));
+scene.add(parts);
+const M = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
+
+let title = null;
+const gold = new THREE.MeshStandardMaterial({ color: '#e9c27a', metalness: 1, roughness: 0.22 });
+const cam = R3.camPath([[0, [0, 0.5, 14], [0, 0.9, 0]], [C.drop, [0, 1.3, 9.5], [0, 0.9, 0]], [6, [1.6, 2.1, 8.2], [0, 1, 0]]]);
+
+Reel.scene({
+  duration: 6, fps: 30,
+  async setup() {
+    title = await R3.text3d(C.title, { size: 1.5, depth: 0.35, bevel: 0.03, letterSpacing: 0.08, material: gold });
+    title.position.y = 0.0;
+    scene.add(title);
+  },
+  cues: [{ t: 0.6, sfx: 'block', gain: 0.5 }, { t: 1.0, sfx: 'block', gain: 0.5 }, { t: 1.4, sfx: 'block', gain: 0.5 }, { t: 1.8, sfx: 'block', gain: 0.5 },
+         { t: 2.2, sfx: 'riser_short', gain: 0.45 }, { t: 3.0, sfx: 'impact', gain: 0.9 }],
+  render(t) {
+    cam(t);
+    // 逐字落下：每字间隔 0.4s，弹簧落地
+    title.children.forEach((m, i) => {
+      const t0 = 0.6 + i * 0.4, k = spring(t - t0, { k: 120, c: 9 });
+      m.position.y = lerp(5, 0, k) + 0.75;
+      m.rotation.x = (1 - clamp(k)) * 1.2;
+      m.visible = t > t0 - 0.6;
+    });
+    // Drop：轮廓光一闪，粒子炸开后环绕
+    const hit = Math.exp(-Math.max(0, t - C.drop) * 3) * (t >= C.drop ? 1 : 0);
+    rim.intensity = 25 * hit + 6 * inv(C.drop, 5, t);
+    if (R3.bloom) R3.bloom.strength = 0.35 + 0.5 * hit;
+    const burst = E.outExpo(inv(C.drop, C.drop + 1.2, t));
+    P.forEach((p, i) => {
+      const a = p.a + t * p.s, r = p.r * lerp(0.15, 1, burst);
+      V.set(Math.cos(a) * r, p.y * lerp(0.3, 1, burst), Math.sin(a) * r - 1);
+      Q4.setFromEuler(new THREE.Euler(t * 2 + i, t + i, 0));
+      S.setScalar(t < C.drop ? 0 : 1);
+      parts.setMatrixAt(i, M.compose(V, Q4, S));
+    });
+    parts.instanceMatrix.needsUpdate = true;
+    document.getElementById('sub').style.opacity = E.outCubic(inv(C.drop + 0.6, C.drop + 1.6, t));
+    R3.render();
+  },
+});
+</script></body></html>

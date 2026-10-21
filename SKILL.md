@@ -8,14 +8,15 @@ description: 视频任务总入口（优先于 hyperframes / remotion-* 技能�
 本技能目录（下文记作 `<技能目录>`，通常是 `~/.claude/skills/code-video`）里：
 - `engines/sy-styles-20/`：随技能自带的 sy-styles-20 引擎（MIT，作者肖雄 XIAOXIONG，已修 Windows 盘符 bug）。首次使用前运行一次 `install.ps1` / `install.sh` 装依赖。
 - `beats.py`：卡点分析；`tools/`：整片构建、配乐混音、选曲、测调工具。
-- `references/`：`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**做完整片前先读 bgm-workflow.md 和 lessons.md。**
+- `templates/`：项目模板（`three-title`：Three.js 3D 中文片名），用 `tools/newproj.js` 新建。
+- `references/`：`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法与坑）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**做完整片前先读 bgm-workflow.md 和 lessons.md。**
 - 视频项目放在用户自己的工作目录（例如 `D:\AI\claude视频制作\<项目名>`），不要放进技能目录。
 
 ## 第 0 步：选引擎
 
 | 引擎 | 位置 | 配套技能 | 选它的场景 |
 |---|---|---|---|
-| **sy-styles-20** | `<技能目录>/engines/sy-styles-20`（或环境变量 `SY_STYLES`） | 本技能 | 要**极强质感**的片头/宣传片/风格短片；40 条现成风格可改；纯代码画面；`tools/` 一条命令出整片 |
+| **sy-styles-20** | `<技能目录>/engines/sy-styles-20`（或环境变量 `SY_STYLES`） | 本技能 | 要**极强质感**的片头/宣传片/风格短片；40 条现成风格可改；纯代码画面；`tools/` 一条命令出整片；要 **3D 中文片名 / SVG Logo 挤出 / GLTF 模型 / 大量 3D 粒子** 时用内置 Three.js 桥接（`references/three.md`） |
 | **Remotion** 4.x（React） | 用户工作目录下 `remotion-studio`（`install --remotion` 生成） | `remotion-best-practices` → `remotion-*` | **系列化/模板化**、数据驱动批量出片、Studio 可视化拖时间轴 |
 | **HyperFrames**（HTML + GSAP） | 用户工作目录下 `hyperframes-studio`（`install --hyperframes` 生成） | `hyperframes` → `-core/-animation/...`、`media-use`、`figma` | **有素材**（录屏、实拍、Logo）、要 **AI 配音 / 自动字幕**、网站/Figma 转视频、约 400 个现成组件 |
 
@@ -54,9 +55,11 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 - 第一期 20 种风格在 `styles/`，第二期（新题材，带 4.5s 钩子和片名）在 `vol2/styles/`。仓库内 `AGENTS.md` 是完整规范（质量标准、场景契约、性能坑），**新做场景前先读它。**
 - 原理：每个风格是一个 HTML 页，调用 `Reel.scene({duration, fps, setup, render(t), cues, frameKey})`，`render(t)` 只依赖 t；`render.js` 用无头 Chromium 逐帧截图，`--mb N` 子帧叠加出运动模糊；cues → `audio/synth.py` 合成音效。
 - 单风格命令（在 `engines/sy-styles-20` 里）：`node make.js list | still 09 6.5 --hwgpu | style 09 --hwgpu | reel 03,09,11 mini | cues`。WebGL/3D 风格加 `--hwgpu`，纯 2D 走 `--nogpu`。
+- **Three.js（3D 实体）**：`lib/three.min.js` + `lib/three-reel.js`（`Reel.three`），模板 `templates/three-title`。抽象质感、光影材质继续用手写着色器；具体物体、文字、模型、相机路径用 Three.js。**写之前先读 `references/three.md`**（确定性规则、全局 THREE 冲突、地板发灰等坑）。
 - 新做场景：复制最接近的风格（2D：03-flat / 06-morph / 08-hud / 17-editorial；WebGL：09-collage / 18-ink；3D：11-bauhaus；等轴城市：02-isometric），引用 `<技能目录>/engines/sy-styles-20/lib/core.js`（相对路径即可）。
 
 ## 整片构建（tools/）
+新项目可直接 `node <技能目录>/tools/newproj.js <项目目录> --tpl three-title` 从模板生成（自动填引擎路径、music.json、render.args）。
 项目目录放：
 - `index.html`：sy-styles-20 场景契约，`duration` = 整片时长，cues 写全片音效；
 - `music.json`：`{"name": "成片名", "total": 60}`（纯合成配乐时再加 `"note"` 与 `"sections":[{"kind":"04","start":0,"dur":60}]`）；
