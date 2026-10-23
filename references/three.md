@@ -41,6 +41,43 @@ const cam = R3.camPath([[t, [x,y,z], [lookX,lookY,lookZ]], ...]); cam(t)   // �
 - **辉光别过曝**：UnrealBloomPass 的 threshold 0.9 左右、strength 0.3–0.6；Drop 闪一下最多 +0.5，倒角高光很容易整片发白。
 - **--mb 抖动**已由桥接层用 `camera.setViewOffset` 处理（运动模糊 + 抗锯齿都生效），场景里别自己再改 viewOffset。
 - 渲染要加 `--hwgpu`（newproj 已写进 render.args）。本机 1080p、带辉光、`--mb 3`：约 1 秒/帧（6 秒片 3 分钟）。
+  再加 Bokeh 景深 + 2048 阴影 + 2D 合成：每个子帧约 1 秒，`--mb 3` 约 3 秒/帧，132 秒片约 3.3 小时，BokehPass 是大头。整片用 `build.js full --mb 3 --jobs 3` 分段并行。
+- **--mb 时 t 可能为负**（第 0 帧快门前半）：render.js 已把 t 夹到 ≥ 0；场景里按帧号取数组仍要做正模：`arr[((Math.floor(t * 30) % N) + N) % N]`。
+
+## 光强参考值（RoomEnvironment + SpotLight decay 1.4，实测不过曝）
+| 光 | 强度 |
+|---|---|
+| 主光 SpotLight | 130–260 |
+| 轮廓光 SpotLight | 70–140 |
+| HemisphereLight | 0.2–0.35 |
+| `envIntensity`（Reel.three 参数） | 0.35 |
+| bloom | threshold 0.9、strength 0.3 |
+初值写成 500–1300 会整片过曝。先抽一帧看曝光，再微调。
+
+## 多镜头片：一张 2D 合成画布做叠化
+一支片里有多个 3D 镜头（不同场景、不同机位）时，不要每个镜头一个 WebGL，而是：
+```js
+const GL = R3.renderer.domElement; GL.style.opacity = 0;          // WebGL 画布只当离屏渲染器
+const OUT = Reel.canvas2d(stage), ctx = OUT.ctx;                 // 真正显示的是这张 2D 画布
+const SHOTS = [ { a: 0, b: 14.6, f: shotOpen }, { a: 14.3, b: 20.3, xin: 0.3, f: shotTitle }, /* … */ ];  // 相邻镜头时间重叠 = 叠化
+function draw3D(f, t, alpha) { f(t); R3.render(); ctx.globalAlpha = alpha; ctx.drawImage(GL, 0, 0, 1920, 1080); ctx.globalAlpha = 1; }
+render(t) {
+  OUT.begin(); ctx.fillStyle = BG; ctx.fillRect(0, 0, 1920, 1080);
+  SHOTS.filter((s) => t >= s.a && t < s.b).forEach((s, i) => draw3D(s.f, t, i === 0 ? 1 : ss(s.a, s.a + s.xin, t)));
+  drawSubs(t); drawYear(t); drawGrain(t); drawVignette();          // 字幕、年份滚轮、颗粒、暗角都画在同一张 2D 画布上
+}
+```
+- 每个 `shotX(t)` 负责：切换可见的场景组、设相机、设景深焦点、设灯光。交叉溶解时同一帧渲两次 3D，渲染时间会翻倍，叠化别太长（0.3–0.6 秒）。
+- 每个场景是一个 `THREE.Group`，用 `SETS[name].visible` 切换，雾和灯光也随镜头切。
+- 常驻浮尘：一组 Points 挂在 `camera` 上（`scene.add(camera); camera.add(dust)`），所有镜头自动都有一层慢速粒子，画面一直在呼吸。
+
+## 档案图做成「书桌上的实物卡片」
+真实的老照片、专利图、博物馆照片，比直接平铺好看得多：
+1. `createImageBitmap(await (await fetch(url)).blob())` 读图；先用 `assets.py grade duo|ink` 统一调色。
+2. 画进一张 2D canvas：米黄底 + 边缘做旧渐变 + 斑点纸纹，图片四周留边，底部宽边写 Courier 说明文字（如 `U.S. PATENT 79,265 · 1868`）。
+3. 贴到一个薄 Box（厚 0.03）的 +y 面（材质数组第 3 个），其余五个面用纸边色；`castShadow / receiveShadow` 打开。
+4. SpotLight 跟随相机目标点打光，加软阴影和浅景深；卡片入场走抛物线滑入落桌，同时轻微旋转，落桌那一刻配 `paper` 或 `stamp` 音效。
+白底博物馆照片放在这种卡片里也不违和。
 
 ## 选 Three.js 还是 HyperFrames 的 three 适配器
 - 画面主体是 3D、要 sy-styles-20 的运动模糊 / cues 音效 / tools 一条命令出片 → 这里的 `Reel.three`。

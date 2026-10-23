@@ -26,6 +26,7 @@ python -P beats.py 配乐.mp3 beats.json        # 拍点、小节首拍、重音
 python tools/keydetect.py 配乐.mp3            # 例：C minor
 ```
 再按小节算 RMS / 低频能量，找出：前奏、Drop（低频突然变强）、桥段、Breakdown（变安静）、第二次 Drop、结尾重音。
+**对齐重击用 `onsets` / `accents`（10ms 精度的真实起音），不要直接用 `downbeats`**：小节首拍是拍格推算的，实测 We Never 的 Drop 在 17.051 秒，拍格给的小节首拍是 17.299 秒，晚了约半拍。impact/boom 照小节首拍放，就会和音乐重拍错开，形成「双响」，听起来像音乐被剪了一刀。`mixbgm.py` 混音时会自动检查：重击音效 ±0.4 秒内有音乐强起音、但差超过 30ms，就会提示该挪到哪里。
 
 ## 4. 画面卡音乐：分段线性时间映射
 画面原本按自己的时间（“片时间”）设计，用映射把关键时刻钉到音乐上，其余段落按比例伸缩（每段速度最好在 0.85–1.25 倍之间，太快太慢都别扭）：
@@ -37,7 +38,14 @@ function filmToOut(f) { /* 反过来插值，用于把音效 cue 从片时间换
 Reel.scene({ duration: 95.6, render(tOut) { const t = outToFilm(tOut); /* 原 render(t) */ } });
 // cues：CUES_ORIG.map(c => ({ ...c, t: filmToOut(c.t) }))
 ```
-音乐长度不合适时**按小节编辑音乐**（`bgm.json` 的 `edit`）：在乐句边界补几个小节（复制前奏乐句）或剪掉中段重复小节，接口落在小节首拍、60ms 交叉淡化，听不出来。
+**默认：整首连续，不剪曲**（可哥的明确偏好：按小节剪接拼出来的配乐听起来「突然变成另一段、被截断」）。做法是：
+1. `edit` 只写一段 `[[起点, null]]`，只选起点偏移，让最重要的一个重拍落在片名上；
+2. 其余关键时刻用上面的分段映射去贴音乐（画面变速，不动音乐）；
+3. 结尾 `fade_out` 约 4 秒长淡出，开头可加 `fade_in` 0.3–0.5 秒。
+卡点不用刻意，叠化跟着**乐句**走就够了（爆款知识片实测也是这样）。
+按小节补剪（`edit` 写多段，接口落在小节首拍、60ms 交叉淡化）只作为不得已的选项，一次最多一个接口，用之前先跟可哥说。
+
+**已经渲染完才换配乐，不用重渲**：`tools/rewarp.py` 把已渲染的帧和 cues 按锚点分段变速（每段 0.9–1.1 倍，非整数帧处用相邻两帧混合），132 秒的片子几分钟就能换完曲。锚点取新配乐的 `accents` / `onsets`。
 
 ## 5. 动效音效：保留，但要适配
 - **不要删**：每个元素出现、扫描、锁定、数据流都要有声音，否则画面显得单调。
@@ -46,9 +54,12 @@ Reel.scene({ duration: 95.6, render(tOut) { const t = outToFilm(tOut); /* 原 re
 - **关键时刻**加低频下沉重音（sub boom），Drop 前 3–4 秒加上升音。
 - **电平**：音效总线比音乐低 5–9 dB；只软削极少数尖峰，**不要因为单个峰值把整条音效轨压低**（踩过的坑：实际被压了 8 dB）。
 - 出片后测：`ffmpeg -i x.mp4 -af ebur128=peak=true -f null -`，目标 -14 ~ -16 LUFS、真峰值 ≤ -1 dBTP（AAC 编码会冒峰，混音末端加 alimiter）。
+- **响度用静态增益，不用 loudnorm**：单遍 `loudnorm` 是动态增益，会把安静段抬起来、重拍压下去，音乐忽大忽小、不连贯。`mixbgm.py` 末端已经改成「ebur128 测整体响度 → 整条乘同一个增益 → alimiter 只挡峰值」，目标响度用 `lufs` 设置（默认 -15）。
 - 只改声音时**不用重渲画面**：重混 `music.wav` 后 `ffmpeg -i 原片.mp4 -i music.wav -map 0:v -map 1:a -c:v copy -c:a aac 新片.mp4`。
 
 ## 6. bgm.json 示例（放项目目录，tools/build.js 会自动使用）
 ```json
-{"music": "../bgm/Digital_Clouds.mp3", "edit": [[0, 15.02], [7.59, 15.02], [15.02, 78.27], [89.44, null]], "total": 95.6, "key": "C minor", "sfx_db": -5}
+{"music": "../bgm/wenever/opus_src.wav", "edit": [[2.115, null]], "total": 132.7, "key": "F minor", "sfx_db": -7, "fade_in": 0.5, "fade_out": 4.5}
 ```
+按小节补剪的写法（不得已时）：`"edit": [[0, 15.02], [7.59, 15.02], [15.02, null]]`。
+可哥喜欢用抖音爆款同款 BGM（如 We Never），会自己提供原视频，从里面分离音轨来用。

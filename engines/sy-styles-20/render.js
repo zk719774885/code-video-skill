@@ -45,7 +45,7 @@ const VW = Math.round(1920 * rs), VH = Math.round(1080 * rs);
     // jitter (Halton 2,3) -> averaged by ffmpeg = motion blur + anti-aliasing. Stop-motion scenes (frameKey) stay at 1.
     const MB = Math.max(1, parseInt(opt('mb', '1'))), SH = parseFloat(opt('shutter', '0.5'));
     const halton = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
-    const subDir = path.join(framesDir, '_sub');
+    const subDir = path.join(framesDir, `_sub${n0}`);   // 按起始帧分目录，--jobs 并行分段时互不覆盖
     if (MB > 1) fs.mkdirSync(subDir, { recursive: true });
     const t0 = Date.now();
     let lastKey = null, lastFile = null, lastSubs = null;
@@ -65,7 +65,7 @@ const VW = Math.round(1920 * rs), VH = Math.round(1080 * rs);
         }
         const subs = [];
         for (let k = 0; k < MB; k++) {
-          const tt = (n + SH * ((k + 0.5) / MB - 0.5)) / fps;
+          const tt = Math.max(0, (n + SH * ((k + 0.5) / MB - 0.5)) / fps);   // 第 0 帧快门前半会算出负 t，场景里按帧号取数组会越界
           const jx = halton(k + 1, 2) - 0.5, jy = halton(k + 1, 3) - 0.5;
           await page.evaluate(([a, x, y]) => { if (window.__setJitter) window.__setJitter(x, y); return window.__seek(a); }, [tt, jx, jy]);
           const sp = path.join(subDir, `s${String((n - n0) * MB + k).padStart(6, '0')}.jpg`);

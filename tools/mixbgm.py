@@ -1,6 +1,9 @@
 """成品配乐 + 动效音效 混音（通用版）：python mixbgm.py bgm.json cues.json out.wav
-bgm.json：{"music": "配乐.mp3", "edit": [[0, 15.02], [7.59, 15.02], [15.02, null]], "total": 95.6, "key": "C minor", "sfx_db": -5}
-  - edit：按小节线拼接音乐片段（秒），用来补/剪小节，让音乐长度贴合画面；null 表示到结尾；
+bgm.json：{"music": "配乐.mp3", "edit": [[2.1, null]], "total": 95.6, "key": "C minor", "sfx_db": -6, "fade_in": 0.5, "fade_out": 4}
+  - edit：默认只写一段 [[起点, null]]＝整首连续、只选起点偏移（可哥偏好，听着不断）；
+    按小节拼接 [[0, 15.02], [7.59, 15.02], [15.02, null]] 只作不得已的选项，一次最多一个接口；
+  - fade_in / fade_out：开头淡入、结尾淡出秒数（默认 0 / 1.2；整首连续时结尾建议 4 秒左右）；
+  - lufs：成片目标响度（默认 -15）。末端是"整体测响度 → 一次性静态增益 → 限幅"，不用 loudnorm（它是动态增益，音乐会忽大忽小）；
   - key：配乐的调（tools/bgmcard.py 或 references/bgm-workflow.md 里的测调脚本可测），所有有音高的音效都吸附到该调的五声音阶并降一个八度；
   - sfx_db：音效总线相对音乐的电平（推荐 -5 ~ -9）。
 音效来自 cues（sy-styles-20 的 SFX 名称 + note/boom/riser），一律低通去刺、加短混响。"""
@@ -21,6 +24,8 @@ XF = 0.06
 TOTAL = CFG['total']
 KEY = CFG.get('key', 'C minor')
 SFX_DB = CFG.get('sfx_db', -5)
+FADE_IN, FADE_OUT = CFG.get('fade_in', 0), CFG.get('fade_out', 1.2)
+LUFS = CFG.get('lufs', -15)
 rng = np.random.default_rng(11)
 
 def n(t): return int(round(t * SR))
@@ -46,7 +51,7 @@ def pluck(m, dur=0.9, bright=1.0):
     return lp(y, 3500) * 0.6
 def pad_key(dur=1.6):   # 配乐调的主和弦铺底（替代原 A 小调 swell）
     N = n(dur); t = np.arange(N) / SR; r = 60 + _root
-    y = sum(np.sin(2 * np.pi * mtof(m) * t + 0.3 * np.sin(2 * np.pi * 0.3 * t)) for m in ((r, r + 3, r + 7, r + 10) if _minor else (r, r + 4, r + 7, r + 11)))
+    y = sum(np.sin(2 * np.pi * mtof(m) * t + 0.3 * np.sin(2 * np.pi * 0.3 * t)) for m in ((r, r + 5, r + 7, r + 12) if _sus else (r, r + 3, r + 7, r + 10) if _minor else (r, r + 4, r + 7, r + 11)))
     return lp(y, 2400) * np.sin(np.pi * t / dur) * 0.22
 def mixs(*xs):
     out = np.zeros(max(len(x) for x in xs))
@@ -58,13 +63,13 @@ def arp(ms, gap=0.06, dur=0.8):
     return out
 
 # ---------- 有音高的音效：吸附到配乐调式的五声音阶，并降一个八度 ----------
-_root = NM[KEY.split()[0]]; _minor = 'minor' in KEY
-PENTA = [(_root + d) % 12 for d in ((0, 3, 5, 7, 10) if _minor else (0, 2, 4, 7, 9))]
+_root = NM[KEY.split()[0]]; _minor = 'minor' in KEY; _sus = 'sus' in KEY     # sus：大小调拿不准时只用两种调式共有的音（1 2 4 5）
+PENTA = [(_root + d) % 12 for d in ((0, 2, 5, 7) if _sus else (0, 3, 5, 7, 10) if _minor else (0, 2, 4, 7, 9))]
 def snap(m):
     cands = [o * 12 + pc for o in range(1, 9) for pc in PENTA]
     return min(cands, key=lambda c: (abs(c - m), c)) - 12
 def deg(i, octv=5):   # 调内第 i 个五声音级（可跨八度）
-    o, k = divmod(i, 5); return 12 * (octv + 1 + o) + PENTA[k] + (12 if PENTA[k] < PENTA[0] else 0)
+    o, k = divmod(i, len(PENTA)); return 12 * (octv + 1 + o) + PENTA[k] + (12 if PENTA[k] < PENTA[0] else 0)
 def tonal(name, c):
     if name == 'note': return pluck(snap(note(c.get('note', 'A5'))))
     if name == 'beep': return pluck(deg(3), 0.35, 0.6) * 0.6
@@ -118,7 +123,9 @@ def main():
         fade = np.linspace(0, 1, xf)[:, None]
         music = np.concatenate([music[:-xf], music[-xf:] * (1 - fade) + seg[:xf] * fade, seg[xf:]])
     L = n(TOTAL); music = music[:L] if len(music) >= L else np.pad(music, ((0, L - len(music)), (0, 0)))
-    music[-n(1.2):] *= np.linspace(1, 0, n(1.2))[:, None] ** 2
+    check_hits(music, cues)     # 在淡入淡出之前测：淡入本身会被当成一个巨大的起音
+    if FADE_IN > 0: music[:n(FADE_IN)] *= np.linspace(0, 1, n(FADE_IN))[:, None] ** 2
+    music[-n(FADE_OUT):] *= np.linspace(1, 0, n(FADE_OUT))[:, None] ** 2
     dry = np.zeros((L + n(4), 2)); wet = np.zeros((L + n(4), 2))
     for c in cues:
         y, send = render_cue(c)
@@ -135,10 +142,35 @@ def main():
     if pk > 1.2: fx = np.tanh(fx / 1.2) * 1.2      # 只软削极少数尖峰，不再整体压低
     mix = music + fx
     tmp = sys.argv[3] + '.pre.wav'
-    wavfile.write(tmp, SR, (np.clip(mix / max(1, np.abs(mix).max() * 1.05), -1, 1) * 32767).astype(np.int16))
-    subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', tmp, '-af', 'loudnorm=I=-15:TP=-2:LRA=11,volume=-1.5dB,alimiter=limit=0.7:attack=1:release=60:level=disabled', '-ar', str(SR), sys.argv[3]], check=True)
+    wavfile.write(tmp, SR, mix.astype(np.float32))
+    # 静态增益：整体测一次响度，整条乘同一个增益，再用限幅器只挡真峰值（不改变音乐的起伏）
+    meas = subprocess.run(['ffmpeg', '-hide_banner', '-i', tmp, '-af', 'ebur128', '-f', 'null', '-'], capture_output=True, text=True, encoding='utf-8', errors='ignore').stderr
+    I = float(meas.rsplit('I:', 1)[1].split('LUFS')[0])
+    gain = LUFS - I + 0.3      # 限幅会吃掉一点，略多给
+    subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', tmp, '-af', f'volume={gain:.2f}dB,alimiter=limit=0.84:attack=1:release=80:level=disabled',
+                    '-c:a', 'pcm_s16le', '-ar', str(SR), sys.argv[3]], check=True)
     os.remove(tmp)
-    print('wrote', sys.argv[3], f'{TOTAL}s')
+    print('wrote', sys.argv[3], f'{TOTAL}s', f'原始 {I:.1f} LUFS → 增益 {gain:+.1f} dB')
+
+
+HEAVY = {'impact', 'impact_soft', 'boom', 'stamp', 'bonk', 'tail'}
+
+
+def check_hits(music, cues):
+    """重击音效附近 ±0.4 秒有音乐强起音、但没对齐（差 > 30ms）→ 会听成"双响"，提示该挪多少。"""
+    sys.path.insert(0, os.path.join(HERE, '..'))
+    import beats as B
+    mono = signal.resample_poly(music.mean(1), B.SR, SR).astype(np.float32)
+    ons = [t for t, s in B.onsets_fine(mono, top=80) if s >= 0.25]
+    bad = 0
+    for c in cues:
+        if c['sfx'] not in HEAVY or c.get('gain', 0.6) < 0.4: continue
+        near = [o for o in ons if abs(o - c['t']) <= 0.4]
+        if not near: continue
+        o = min(near, key=lambda o: abs(o - c['t']))
+        if abs(o - c['t']) > 0.03:
+            bad += 1; print(f"⚠ 双响风险：{c['sfx']} @ {c['t']:.3f}s，音乐重拍在 {o:.3f}s（差 {(c['t'] - o) * 1000:+.0f} ms）→ 把这个 cue 挪到 {o:.3f}")
+    if not bad: print('✔ 重击音效与音乐重拍对齐检查通过')
 
 if __name__ == '__main__':
     main()

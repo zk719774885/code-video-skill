@@ -5,6 +5,8 @@
 - beats：每一拍（画面小动作可踩这里）
 - downbeats：每小节第一拍（4/4 拍，画面切换/换镜头踩这里）
 - accents：能量最强的起音点（片名、钩子时刻、关键音效踩这里）
+- onsets：10ms 精度的强起音点 [时间, 强度]。**音效重击必须对齐这里**，不要直接用 downbeats——
+  小节首拍是拍格推算的，实测可能比真实 Drop 晚 0.25 秒，重击和音乐重拍错开就成了"双响"
 """
 import json, subprocess, sys
 import numpy as np
@@ -67,6 +69,22 @@ def track(env, bpm):
     return beats_t, beats_t[k::4]
 
 
+def onsets_fine(x, hop=220, top=40):
+    """10ms 精度的强起音点（真正的鼓点/重击落点）：[(时间, 相对强度 0–1), ...]。"""
+    n = 1024
+    frames = np.lib.stride_tricks.sliding_window_view(np.pad(x, (n // 2, n // 2)), n)[::hop] * np.hanning(n)
+    mag = np.abs(np.fft.rfft(frames, axis=1))
+    edges = np.unique(np.geomspace(1, mag.shape[1] - 1, 33).astype(int))
+    bands = np.log1p(np.add.reduceat(mag, edges, axis=1) * 10)
+    flux = np.concatenate([[0], np.maximum(0, np.diff(bands, axis=0)).sum(1)])
+    flux = np.maximum(0, flux - np.convolve(flux, np.ones(31) / 31, 'same'))
+    fps = SR / hop
+    pk, _ = find_peaks(flux, distance=int(0.25 * fps), prominence=np.percentile(flux, 98) * 0.5)
+    pk = pk[np.argsort(flux[pk])[::-1][:top]]
+    mx = flux[pk].max() if len(pk) else 1
+    return sorted([round(float(p / fps), 3), round(float(flux[p] / mx), 2)] for p in pk)
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     path = sys.argv[1]
@@ -83,6 +101,7 @@ def main():
         'beats': [round(float(t), 3) for t in beats],
         'downbeats': [round(float(t), 3) for t in downs],
         'accents': sorted(round(float(t), 3) for t in acc / fps),
+        'onsets': onsets_fine(x),
     }
     s = json.dumps(out, ensure_ascii=False, indent=1)
     if len(sys.argv) > 2:

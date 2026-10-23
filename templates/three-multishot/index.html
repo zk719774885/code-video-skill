@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Three.js 多镜头模板</title>
+<!-- SY = sy-styles-20 引擎目录；tools/newproj.js 建项目时会自动替换成实际路径 -->
+<script src="SY/lib/core.js"></script><script src="SY/lib/three.min.js"></script><script src="SY/lib/three-reel.js"></script>
+</head><body><div id="stage"></div>
+<script>
+/* Three.js 多镜头模板（10 秒）：WebGL 只当离屏渲染器，每个镜头 f(t) 设场景/相机后渲一次，
+   按 alpha 画到一张 2D 合成画布上——相邻镜头时间重叠就是叠化。字幕（逐字 + 英文副行）、
+   年份滚轮、颗粒、暗角都画在同一张 2D 画布上。常驻浮尘挂在相机上。所有运动只由 t 决定。 */
+const { E, clamp, inv, lerp, rng } = Reel;
+const W = 1920, H = 1080, BG = '#0a0705';
+const stage = Reel.makeStage(BG);
+const R3 = Reel.three(stage, { bg: BG, fov: 32, envIntensity: 0.35, bloom: { strength: 0.3, radius: 0.55, threshold: 0.9 } });
+const { scene, camera, renderer } = R3;
+const GL = renderer.domElement; GL.style.opacity = 0;
+const OUT = Reel.canvas2d(stage), ctx = OUT.ctx;
+const ss = (a, b, t) => { const x = clamp((t - a) / (b - a)); return x * x * (3 - 2 * x); };
+
+// ---------- 灯光（参考值见 references/three.md） ----------
+scene.add(new THREE.HemisphereLight('#ffe9cc', '#1a120c', 0.3));
+const key = new THREE.SpotLight('#ffe2b8', 200, 0, 0.5, 0.7, 1.4); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0002;
+scene.add(key, key.target);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: '#0c0907', roughness: 0.35, metalness: 0.4, envMap: scene.environment, envMapIntensity: 0.08 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+// ---------- 场景组：每个镜头一个 Group ----------
+const SETS = {};
+function useSet(name) { for (const k in SETS) SETS[k].visible = k === name; }
+SETS.A = new THREE.Group(); scene.add(SETS.A);
+const cube = new THREE.Mesh(new THREE.RoundedBoxGeometry(2, 2, 2, 4, 0.18), new THREE.MeshStandardMaterial({ color: '#c8a46a', metalness: 0.9, roughness: 0.3 }));
+cube.position.y = 1; cube.castShadow = true; SETS.A.add(cube);
+SETS.B = new THREE.Group(); scene.add(SETS.B);
+const balls = [];
+{ const r = rng(5); for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.45, 48, 24), new THREE.MeshStandardMaterial({ color: i % 3 ? '#cfc3ab' : '#b8452e', roughness: 0.55 })); m.castShadow = true; m.userData = { x: (i % 3 - 1) * 1.6, z: (Math.floor(i / 3) - 1) * 1.6, d: r() * 0.8 }; SETS.B.add(m); balls.push(m); } }
+
+// ---------- 常驻浮尘：挂在相机上，所有镜头都有 ----------
+scene.add(camera);
+const ND = 300, dr = rng(21), dust = Array.from({ length: ND }, () => [dr() * 2 - 1, dr() * 2 - 1, 1.5 + dr() * 10, dr() * 100]);
+const dg = new THREE.BufferGeometry(), dp = new Float32Array(ND * 3); dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+const dustPts = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.04, color: '#ffd9a6', transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+dustPts.frustumCulled = false; camera.add(dustPts);
+function updDust(t) {
+  const tf = Math.tan((camera.fov * Math.PI) / 360);
+  dust.forEach(([x, y, z, s], i) => {
+    const wx = ((((x + 0.04 * Math.sin(t * 0.2 + s) + t * 0.006 + 1) % 2) + 2) % 2) - 1, wy = ((((y + t * 0.012 + 1) % 2) + 2) % 2) - 1;
+    dp.set([wx * z * tf * camera.aspect, wy * z * tf, -z], i * 3);
+  });
+  dg.attributes.position.needsUpdate = true;
+}
+function look(p, l) { camera.position.set(...p); camera.lookAt(...l); key.position.set(l[0] - 3, 9, l[2] + 4); key.target.position.set(...l); }
+
+// ---------- 镜头 ----------
+function shotA(t) { useSet('A'); const u = E.inOutSine(inv(0, 6, t)); look([lerp(-5, 3, u), lerp(2.2, 3.2, u), lerp(7, 6, u)], [0, 1, 0]); cube.rotation.y = t * 0.4; updDust(t); }
+function shotB(t) { useSet('B'); balls.forEach((m) => { const k = Reel.spring(t - 5.5 - m.userData.d, { k: 120, c: 8 }); m.position.set(m.userData.x, lerp(6, 0.45, k), m.userData.z); });
+  const u = E.inOutSine(inv(5, 10, t)); look([lerp(0, 2, u), lerp(7, 5, u), lerp(6, 7, u)], [0, 0.4, 0]); updDust(t); }
+const SHOTS = [{ a: 0, b: 6.0, f: shotA }, { a: 5.4, b: 10, xin: 0.6, f: shotB }];   // 5.4–6.0 重叠 = 0.6 秒叠化
+function draw3D(f, t, alpha) { f(t); R3.render(); ctx.globalAlpha = alpha; ctx.drawImage(GL, 0, 0, W, H); ctx.globalAlpha = 1; }
+
+// ---------- 2D 层：逐字字幕 + 英文副行（{} 内为高亮） ----------
+const SUBS = [[0.8, 4.8, '每一个{镜头}，都是一个独立的场景', 'Every shot is its own scene'], [6.2, 9.6, '叠化，只是两个镜头{同时出现}', 'A dissolve is just two shots at once']]
+  .map(([a, b, zh, en]) => { const chars = []; let hl = false; for (const c of zh) { if (c === '{') hl = true; else if (c === '}') hl = false; else chars.push([c, hl]); } return { a, b, en, chars }; });
+function drawSubs(t) {
+  for (const s of SUBS) {
+    if (t < s.a || t > s.b) continue;
+    const fo = 1 - ss(s.b - 0.35, s.b, t), rate = Math.max(16, s.chars.length / 1.1);
+    ctx.font = '600 46px "Noto Serif SC","Source Han Serif SC",serif'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    const ws = s.chars.map(([c]) => ctx.measureText(c).width); let x = W / 2 - ws.reduce((p, q) => p + q, 0) / 2;
+    s.chars.forEach(([c, hl], i) => {
+      const ct = s.a + i / rate, al = clamp((t - ct) / 0.09) * fo;
+      if (al > 0) { ctx.globalAlpha = al; ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 14; ctx.fillStyle = hl ? '#f0c06a' : '#f3ead8'; ctx.fillText(c, x, 958 + (1 - clamp((t - ct) / 0.12)) * 6); }
+      x += ws[i];
+    });
+    ctx.shadowBlur = 0;
+    const ea = ss(s.a + (s.chars.length / rate) * 0.6, s.a + (s.chars.length / rate) * 0.6 + 0.5, t) * fo;
+    ctx.globalAlpha = ea * 0.82; ctx.font = 'italic 25px Georgia,serif'; ctx.fillStyle = '#d9c8a6'; ctx.textAlign = 'center'; ctx.fillText(s.en, W / 2, 1006);
+    ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+  }
+}
+// ---------- 年份滚轮（左上，逐位滚动） ----------
+const YEARS = [[0.4, 1868, 'MILWAUKEE'], [5.6, 2026, 'TODAY · 今天']];
+function drawYear(t) {
+  let i = 0; while (i < YEARS.length - 1 && t >= YEARS[i + 1][0]) i++;
+  if (t < YEARS[0][0] - 0.3) return;
+  ctx.globalAlpha = ss(YEARS[0][0] - 0.3, YEARS[0][0], t);
+  const [t0, y1, place] = YEARS[i], a = String(i ? YEARS[i - 1][1] : 0).padStart(4, '0'), b = String(y1), x0 = 92, top = 78, dw = 44, dh = 66;
+  ctx.font = '700 60px Georgia,serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let k = 0; k < 4; k++) {
+    const d0 = +a[k], d1 = +b[k], u = E.inOutCubic(inv(t0 + k * 0.08, t0 + 1.1 + k * 0.08, t));
+    const pos = d0 + u * (((d1 - d0 + 10) % 10) + 10 * (3 - k) * (d0 !== d1 || i === 0 ? 1 : 0));
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 + k * dw - dw / 2, top, dw, dh); ctx.clip();
+    for (let j = -1; j <= 1; j++) { const fy = pos - Math.floor(pos) - j; ctx.globalAlpha = ss(YEARS[0][0] - 0.3, YEARS[0][0], t) * clamp(1 - Math.abs(fy) * 0.9); ctx.fillStyle = '#efc777'; ctx.fillText(String((((Math.floor(pos) + j) % 10) + 10) % 10), x0 + k * dw, top + dh / 2 + 4 - fy * dh); }
+    ctx.restore();
+  }
+  ctx.globalAlpha = ss(t0 + 0.6, t0 + 1.2, t); ctx.font = '400 17px Georgia,serif'; ctx.fillStyle = '#e6d6b4'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(place, x0 - dw / 2, top + dh + 36); ctx.globalAlpha = 1;
+}
+// ---------- 颗粒 + 暗角 ----------
+let GRAIN = [], VIG;
+function makeGrainVig() {
+  const r = rng(9);
+  for (let k = 0; k < 6; k++) { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), id = g.createImageData(256, 256);
+    for (let i = 0; i < id.data.length; i += 4) { const v = r() * 255; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 22; } g.putImageData(id, 0, 0); GRAIN.push(ctx.createPattern(c, 'repeat')); }
+  VIG = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95); VIG.addColorStop(0, 'rgba(0,0,0,0)'); VIG.addColorStop(1, 'rgba(0,0,0,.55)');
+}
+function drawGrainVig(t) {
+  const n = ((Math.floor(t * 24) % GRAIN.length) + GRAIN.length) % GRAIN.length;   // t 可能为负：正模
+  ctx.fillStyle = GRAIN[n]; ctx.globalCompositeOperation = 'overlay'; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = VIG; ctx.fillRect(0, 0, W, H);
+}
+
+Reel.scene({
+  duration: 10, fps: 30,
+  fonts: ['600 46px "Noto Serif SC"', 'italic 25px Georgia', '700 60px Georgia'],
+  async setup() { makeGrainVig(); },
+  cues: [{ t: 0.4, sfx: 'whoosh', gain: 0.4 }, { t: 5.5, sfx: 'whoosh', gain: 0.5 }, { t: 5.9, sfx: 'pop', gain: 0.5 }, { t: 6.1, sfx: 'pop', gain: 0.5 }],
+  render(t) {
+    OUT.begin(); ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+    SHOTS.filter((s) => t >= s.a && t < s.b).forEach((s, i) => { const al = i === 0 ? 1 : ss(s.a, s.a + s.xin, t); if (al > 0.001) draw3D(s.f, t, al); });
+    drawYear(t); drawSubs(t); drawGrainVig(t);
+  },
+});
+</script></body></html>

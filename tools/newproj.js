@@ -12,8 +12,16 @@ const src = path.join(__dirname, '..', 'templates', tpl);
 const SY = process.env.SY_STYLES || path.join(__dirname, '..', 'engines', 'sy-styles-20');
 if (!fs.existsSync(src)) { console.error('没有这个模板：' + tpl + '（可选：' + fs.readdirSync(path.join(__dirname, '..', 'templates')).join(' / ') + '）'); process.exit(1); }
 if (fs.existsSync(path.join(dest, 'index.html'))) { console.error('目标目录已有 index.html，不覆盖：' + dest); process.exit(1); }
-fs.mkdirSync(dest, { recursive: true });
-fs.cpSync(src, dest, { recursive: true });
+// 不用 fs.cpSync：Node 24 在 Windows 上复制到含中文的目录时什么都不复制也不报错
+function copyDir(a, b) {
+  fs.mkdirSync(b, { recursive: true });
+  for (const e of fs.readdirSync(a, { withFileTypes: true })) {
+    const s = path.join(a, e.name), d = path.join(b, e.name);
+    if (e.isDirectory()) copyDir(s, d); else fs.writeFileSync(d, fs.readFileSync(s));
+  }
+}
+copyDir(src, dest);
+if (!fs.existsSync(path.join(dest, 'index.html'))) { console.error('复制模板失败：' + dest); process.exit(1); }
 const sameDrive = path.parse(dest).root.toLowerCase() === path.parse(SY).root.toLowerCase();
 const syRef = sameDrive ? path.relative(dest, SY).split(path.sep).join('/') : pathToFileURL(SY).href;
 const html = path.join(dest, 'index.html');
