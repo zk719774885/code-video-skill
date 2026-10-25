@@ -7,7 +7,7 @@ description: 视频任务总入口（优先于 hyperframes / remotion-* 技能�
 
 本技能目录（下文记作 `<技能目录>`，通常是 `~/.claude/skills/code-video`）里：
 - `engines/sy-styles-20/`：随技能自带的 sy-styles-20 引擎（MIT，作者肖雄 XIAOXIONG，已修 Windows 盘符 bug）。首次使用前运行一次 `install.ps1` / `install.sh` 装依赖。
-- `beats.py`：卡点分析；`tools/`：整片构建（`build.js`，支持 `--jobs` 并行）、配乐混音（`mixbgm.py`）、换配乐不重渲（`rewarp.py`）、素材（`assets.py`）、视频联系表（`contact.py`）、选曲、测调、模型转 glTF（`to_gltf.py`）。
+- `beats.py`：卡点分析；`tools/`：整片构建（`build.js`，支持 `--jobs` 并行）、配乐混音（`mixbgm.py`）、换配乐不重渲（`rewarp.py`）、加封面不重渲（`addcover.py`）、素材（`assets.py`）、视频联系表（`contact.py`）、选曲、测调、模型转 glTF（`to_gltf.py`）。
 - `templates/`：项目模板（`three-title`：3D 中文片名；`three-multishot`：多镜头叠化 + 逐字字幕 + 年份滚轮 + 颗粒暗角），用 `tools/newproj.js` 新建；`blender-smash/scene.py`：Blender 刚体砸字 + 子弹时间招牌镜头。
 - `references/`：`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**做完整片前先读 bgm-workflow.md 和 lessons.md。**
 - 视频项目放在用户自己的工作目录（例如 `D:\AI\claude视频制作\<项目名>`），不要放进技能目录。
@@ -66,7 +66,8 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 - `bgm.json`（用成品配乐时）：`{"music": "配乐.mp3", "edit": [[起点, null]], "total": 60, "key": "C minor", "sfx_db": -6, "fade_in": 0.5, "fade_out": 4}`；
 - 可选 `render.args`：WebGL 场景写 `--hwgpu`（默认 `--nogpu`）。
 
-命令（在项目目录）：`node <技能目录>/tools/build.js still 3 8.5` 抽帧 → `... clip 0 10` 小样 → `... full --mb 3 --jobs 3` 整片（`out/<name>.mp4`，`--jobs` 分段并行）。
+命令（在项目目录）：`node <技能目录>/tools/build.js still 3 8.5` 抽帧 → `... clip 0 10` 小样 → `... full --mb 3 --jobs 10` 整片（`out/<name>.mp4`；`--jobs` 分段并行，约取 CPU 线程数的 40%；长片会先试渲估算总时长）。
+加封面（抖音取第一帧）：做一个 2–3 秒封面场景，渲成帧后 `python -X utf8 <技能目录>/tools/addcover.py --cover frames/cover --frames frames/full --bgm bgm.json --cues out/cues.json --out out/成片_含封面.mp4`。
 已经渲完才换配乐：`python <技能目录>/tools/rewarp.py anchors.json frames/full frames/warp --cues out/cues.json out/cues2.json`，不用重渲。
 只改声音不用重渲画面：重跑 `python <技能目录>/tools/mixbgm.py bgm.json out/cues.json out/music.wav`，再 `ffmpeg -i 片.mp4 -i out/music.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 256k 新片.mp4`。
 

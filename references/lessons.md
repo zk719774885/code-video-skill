@@ -20,13 +20,29 @@
 - 2D canvas 场景 `--nogpu --mb 3~4`：约 0.3–0.5 秒/帧，90 秒片约 20–30 分钟。
 - WebGL 水墨等重着色器 `--hwgpu --mb 2`：约 3 秒/帧，60 秒片约 1.5 小时，提前告诉用户。
 - Three.js + Bokeh 景深 + Bloom + 2048 阴影 + 2D 合成 `--mb 3`：约 3 秒/帧，132 秒片约 3.3 小时（BokehPass 是大头）。
-- 整片用 `build.js full --jobs 3` 分段并行：同一个片子开 3 个浏览器各渲一段（实测 2 秒小样 53 秒 → 28 秒）。多条不同的片同时渲也行，但会互相拖慢。
+- 整片用 `build.js full --jobs N` 分段并行：同一个片子开 N 个浏览器各渲一段。N 约取 CPU 线程数的 40%（本机 24 线程用 10：90 秒片 `--mb 2` 只要 3.6 分钟）。多条不同的片同时渲也行，但会互相拖慢。
+- 超过 10 秒的片，build.js 会先在中段试渲 0.5 秒，打印每帧耗时和预计总时长；每帧超过 3 秒会提示查性能坑。
+- **2D Canvas 性能坑（严重）**：对大量笔画逐个设 `ctx.filter = 'blur(...)'`（想做背景景深），无头 Chromium 下每帧从 0.5 秒涨到 20 秒以上，90 秒片要 3 小时。要虚化就先画到一张离屏小画布，再整体模糊一次；或者直接降透明度、加粗线宽冒充虚焦。`shadowBlur` 发光也贵，但量不大时可以接受。
+- 重 2D 场景（大量路径、发光）`render.args` 写 `--hwgpu` 也能再快约 3 倍，不只是 WebGL 才用。
 - `--mb` 子帧的 t 在第 0 帧会略小于 0：render.js 已夹到 ≥ 0，但场景里按帧号取数组（颗粒贴图、帧序列）仍要做正模 `((i % N) + N) % N`，否则拿到 undefined，createPattern 报错会直接中断渲染。
 
 ## 工具坑（Windows）
 - winget 装的 ffmpeg 8 没有 fontconfig 配置，`drawtext` 不写 `fontfile` 会**段错误崩溃**（不是普通报错）。一律写 `drawtext=fontfile='C\:/Windows/Fonts/arial.ttf':…`，盘符冒号要转义。看视频用 `tools/contact.py`（已处理好，带时间码）。
 - PPT 里内嵌的视频、GIF：pptx 就是 zip，直接从 `ppt/media/` 解出来看。
 - Node 24 的 `fs.cpSync` 复制到含中文的目录时**什么都不复制也不报错**；要复制目录就逐个文件 `readFileSync` + `writeFileSync`（newproj.js 已改）。
+- PowerShell 的 `Set-Content -Encoding utf8` 会写 **BOM**，Node 的 `JSON.parse` 直接报错。build.js、addcover.py 读 JSON 已去 BOM；自己写 JSON 尽量用 Write 工具或 Python。
+- `cv2.imread` 不认中文路径（返回 None 不报错）：用 `cv2.imdecode(np.fromfile(路径, np.uint8), cv2.IMREAD_COLOR)` 读，`cv2.imencode('.png', img)[1].tofile(路径)` 写。
+- ffmpeg 8 的 `h264_nvenc` 要 NVIDIA 驱动 ≥ 610，驱动旧会直接失败；编码前先试一下，不行就回退 `libx264 -crf 17`（addcover.py 已这样做）。
+- **成片不要二次压缩**：要改片头片尾、加封面，都从原始逐帧图重新编码一次，别拿压好的 mp4 再压（实测码率 11.7 → 8.9 Mbps）。
+
+## 2D Canvas 技巧（通用）
+- **自制小型透视 3D 线稿**（不想上 Three.js 时）：顶点乘相机矩阵再透视除法得到屏幕坐标；面按平均深度从远到近排序再画（画家算法）；线宽和透明度随深度衰减，远处细而淡，立体感立刻出来。
+- **笔触辉光**：同一条路径画三遍。底层粗线、低透明度加 `shadowBlur` 当光晕；中层正常线；最上面一条细的白色高光芯。笔尖处再撒几颗随时间衰减的火花粒子，「正在书写」的感觉很强。
+- **弹簧过冲会让半径变负**：`spring()` 会冲过 1 再回来，用它驱动缩放时 `arc` 的半径可能小于 0，`ctx.arc` 直接抛异常并中断渲染。凡是由动画算出来的半径都包一层 `Math.max(0, r)`。
+- **抠图**：OpenCV `grabCut` 用掩码初始化（先给确定前景、确定背景、可能前景三类）比矩形初始化干净很多；抠完边缘羽化 1–2 像素。
+
+## 加封面
+抖音取第一帧当封面。不重渲正片的做法：单独做一个 2–3 秒的封面场景（第 0 帧就是完整封面），用 `tools/addcover.py` 接到片头，0.4 秒溶接；配乐起点前移、音效整体后移、重混；封面第 0 帧作为 `attached_pic` 写进 mp4。
 
 ## 读客户提供的素材
 - 企业给的「提资」里常混着**第三方厂商的演示视频**（片头是厂商 Logo）和带 **DEMO 水印**的录屏。看总览图时专门检查片头、片尾和水印，在摘要里标「不建议用」，并问用户要无水印的原片。

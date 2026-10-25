@@ -41,7 +41,7 @@ const cam = R3.camPath([[t, [x,y,z], [lookX,lookY,lookZ]], ...]); cam(t)   // �
 - **辉光别过曝**：UnrealBloomPass 的 threshold 0.9 左右、strength 0.3–0.6；Drop 闪一下最多 +0.5，倒角高光很容易整片发白。
 - **--mb 抖动**已由桥接层用 `camera.setViewOffset` 处理（运动模糊 + 抗锯齿都生效），场景里别自己再改 viewOffset。
 - 渲染要加 `--hwgpu`（newproj 已写进 render.args）。本机 1080p、带辉光、`--mb 3`：约 1 秒/帧（6 秒片 3 分钟）。
-  再加 Bokeh 景深 + 2048 阴影 + 2D 合成：每个子帧约 1 秒，`--mb 3` 约 3 秒/帧，132 秒片约 3.3 小时，BokehPass 是大头。整片用 `build.js full --mb 3 --jobs 3` 分段并行。
+  再加 Bokeh 景深 + 2048 阴影 + 2D 合成：每个子帧约 1 秒，`--mb 3` 约 3 秒/帧，132 秒片约 3.3 小时，BokehPass 是大头。整片用 `build.js full --mb 3 --jobs 10` 分段并行（24 线程机器；一般取线程数的 40%）。
 - **--mb 时 t 可能为负**（第 0 帧快门前半）：render.js 已把 t 夹到 ≥ 0；场景里按帧号取数组仍要做正模：`arr[((Math.floor(t * 30) % N) + N) % N]`。
 
 ## 光强参考值（RoomEnvironment + SpotLight decay 1.4，实测不过曝）

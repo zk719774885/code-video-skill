@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 通用构建：在项目目录执行 node <技能目录>/tools/build.js still 3 5 | clip a b [--mb N] [--jobs N] | full [--mb N] [--jobs N]（--jobs 分段并行渲染，独显上 2–4 合适）
+// 通用构建：在项目目录执行 node <技能目录>/tools/build.js still 3 5 | clip a b [--mb N] [--jobs N] | full [--mb N] [--jobs N]（--jobs 分段并行渲染，约取 CPU 线程数的 40%：24 线程用 10）
 // 项目目录需有 index.html、music.json（name、total；纯合成配乐时再写 sections、note）；用成品配乐时另放 bgm.json；可选 render.args（如 --hwgpu）
 const { spawnSync, spawn } = require('child_process');
 const fs = require('fs'), path = require('path');
@@ -10,7 +10,9 @@ const args = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1] || '').s
 const out = (...p) => path.join(ROOT, 'out', ...p);
 fs.mkdirSync(out(), { recursive: true });
 const HTML = path.join(ROOT, 'index.html');
-const MJ = JSON.parse(fs.readFileSync(path.join(ROOT, 'music.json'), 'utf8'));
+// 去掉 BOM：PowerShell 的 Set-Content -Encoding utf8 会写 BOM，JSON.parse 直接报错
+const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''));
+const MJ = readJSON(path.join(ROOT, 'music.json'));
 const extra = fs.existsSync(path.join(ROOT, 'render.args')) ? fs.readFileSync(path.join(ROOT, 'render.args'), 'utf8').trim().split(/\s+/) : ['--nogpu'];
 function run(cmd, a) { const r = spawnSync(cmd, a, { cwd: ROOT, stdio: 'inherit' }); if (r.status !== 0) { console.error(`${cmd} 失败（${r.status}）`); process.exit(1); } }
 async function dumpCues() {
@@ -21,10 +23,23 @@ async function dumpCues() {
   const cues = await p.evaluate(() => window.__cues); await b.close();
   fs.writeFileSync(out('cues.json'), JSON.stringify(cues));
 }
+// 长片开渲前先在片子中段试渲 0.5 秒，估算总时长并打印（逐笔 ctx.filter 这类性能坑一眼就能看出来）
+function estimate(a, b, jobs) {
+  const tmp = path.join(ROOT, 'frames', '_probe'); fs.rmSync(tmp, { recursive: true, force: true });
+  const m = (a + b) / 2, t0 = Date.now();
+  spawnSync('node', [path.join(SY, 'render.js'), HTML, 'x', ...extra, '--mb', opt('mb', '3'), '--from', String(m), '--to', String(m + 0.5), '--frames', tmp], { cwd: ROOT, stdio: 'ignore' });
+  fs.rmSync(tmp, { recursive: true, force: true });
+  const perFrame = (Date.now() - t0) / 1000 / 15, total = (perFrame * (b - a) * 30) / Math.max(1, jobs * 0.8);
+  const cpus = require('os').cpus().length;
+  console.log(`⏱ 试渲：约 ${perFrame.toFixed(2)} 秒/帧（含浏览器启动），--jobs ${jobs} 预计约 ${Math.ceil(total / 60)} 分钟`);
+  if (perFrame > 3) console.log('⚠ 每帧偏慢：检查是否逐笔用了 ctx.filter / 大量 shadowBlur；重 2D 场景试试 render.args 写 --hwgpu');
+  if (jobs < Math.floor(cpus * 0.4) && total > 600) console.log(`  提示：本机 ${cpus} 线程，可以加 --jobs ${Math.floor(cpus * 0.4)}`);
+}
 async function clip(a, b, name) {
   const fdir = path.join(ROOT, 'frames', name); fs.rmSync(fdir, { recursive: true, force: true });
   // --jobs N：按帧号切成 N 段，各开一个浏览器并行渲染到同一个 frames 目录
   const jobs = Math.max(1, parseInt(opt('jobs', '1'))), n0 = Math.round(a * 30), n1 = Math.round(b * 30);
+  if (b - a > 10) estimate(a, b, jobs);
   const segs = Array.from({ length: jobs }, (_, i) => [n0 + Math.round(((n1 - n0) * i) / jobs), n0 + Math.round(((n1 - n0) * (i + 1)) / jobs)]).filter(([x, y]) => y > x);
   const codes = await Promise.all(segs.map(([x, y]) => new Promise((res) => {
     const p = spawn('node', [path.join(SY, 'render.js'), HTML, 'x', ...extra, '--mb', opt('mb', '3'), '--from', String(x / 30), '--to', String(y / 30), '--frames', fdir], { cwd: ROOT, stdio: jobs > 1 ? ['ignore', 'ignore', 'inherit'] : 'inherit' });
