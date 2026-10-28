@@ -1,6 +1,6 @@
 ---
 name: code-video
-description: 视频任务总入口（优先于 hyperframes / remotion-* 技能先读）。任何"做视频/动画/片头/宣传片/知识科普视频/渲染 MP4/配 BGM/卡点"的请求，先读本技能：按场景在 sy-styles-20（随技能自带）、Remotion、HyperFrames 三个引擎里选一个；先定配乐（优先免费成品配乐）再卡点；走四步法（定规格→卡点→配音效→试片逐段推进）；用 tools/ 一条命令出整片。
+description: 视频任务总入口（优先于 hyperframes / remotion-* / lemo-opuscar 技能先读）。任何"做视频/动画/片头/宣传片/知识科普视频/渲染 MP4/配 BGM/卡点"的请求，或点名某种画风（水墨、浮世绘、皮影、卫星简报、产品拆解……）时，先读本技能：按场景在 sy-styles-20（随技能自带）、lemo-opuscar（157 种风格库）、Remotion、HyperFrames 里选一个；先定配乐（优先免费成品配乐）再卡点；走四步法（定规格→卡点→配音效→试片逐段推进）；用 tools/ 一条命令出整片。
 ---
 
 # 视频总调度（code-video）
@@ -9,7 +9,7 @@ description: 视频任务总入口（优先于 hyperframes / remotion-* 技能�
 - `engines/sy-styles-20/`：随技能自带的 sy-styles-20 引擎（MIT，作者肖雄 XIAOXIONG，已修 Windows 盘符 bug）。首次使用前运行一次 `install.ps1` / `install.sh` 装依赖。
 - `beats.py`：卡点分析；`tools/`：整片构建（`build.js`，支持 `--jobs` 并行）、配乐混音（`mixbgm.py`）、换配乐不重渲（`rewarp.py`）、加封面不重渲（`addcover.py`）、素材（`assets.py`）、视频联系表（`contact.py`）、选曲、测调、模型转 glTF（`to_gltf.py`）。
 - `templates/`：项目模板（`three-title`：3D 中文片名；`three-multishot`：多镜头叠化 + 逐字字幕 + 年份滚轮 + 颗粒暗角），用 `tools/newproj.js` 新建；`blender-smash/scene.py`：Blender 刚体砸字 + 子弹时间招牌镜头。
-- `references/`：`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**做完整片前先读 bgm-workflow.md 和 lessons.md。**
+- `references/`：`directing.md`（**导演方法：对标、创意方案、声音、节奏、镜头、交付自查，所有引擎通用，开工前必读**）、`lemo-styles.md`（lemo-opuscar 157 种风格中文目录）、`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**开工前先读 directing.md；做完整片前先读 bgm-workflow.md 和 lessons.md。**
 - 视频项目放在用户自己的工作目录（例如 `D:\AI\claude视频制作\<项目名>`），不要放进技能目录。
 
 ## 第 0 步：选引擎
@@ -17,11 +17,12 @@ description: 视频任务总入口（优先于 hyperframes / remotion-* 技能�
 | 引擎 | 位置 | 配套技能 | 选它的场景 |
 |---|---|---|---|
 | **sy-styles-20** | `<技能目录>/engines/sy-styles-20`（或环境变量 `SY_STYLES`） | 本技能 | 要**极强质感**的片头/宣传片/风格短片；40 条现成风格可改；纯代码画面；`tools/` 一条命令出整片；要 **3D 中文片名 / SVG Logo 挤出 / GLTF 模型 / 大量 3D 粒子** 时用内置 Three.js 桥接（`references/three.md`）；上千刚体碰撞、路径追踪的「像实拍」招牌镜头用 Blender 渲出序列帧当素材（`references/blender.md`） |
+| **lemo-opuscar**（风格库，MIT） | `D:\AI\claude视频制作\lemo-opuscar`（环境变量 `LEMO`；`install.ps1 -Lemo` 安装） | 本技能（`references/lemo-styles.md`） | 用户**点名某种画风**（水墨、浮世绘、皮影、木刻、默片、像素 RPG、卫星简报、点云测绘、产品拆解、积木玩具……）或题材正好对上其中一种；59 种完整风格（风格卡 + 示例源码）+ 98 种 OPUSCAR 风格提示词 |
 | **Remotion** 4.x（React） | 用户工作目录下 `remotion-studio`（`install --remotion` 生成） | `remotion-best-practices` → `remotion-*` | **系列化/模板化**、数据驱动批量出片、Studio 可视化拖时间轴 |
 | **HyperFrames**（HTML + GSAP） | 用户工作目录下 `hyperframes-studio`（`install --hyperframes` 生成） | `hyperframes` → `-core/-animation/...`、`media-use`、`figma` | **有素材**（录屏、实拍、Logo）、要 **AI 配音 / 自动字幕**、网站/Figma 转视频、约 400 个现成组件 |
 
 判断规则：
-- 用户点名哪个就用哪个；没点名：素材/配音/URL/Figma → HyperFrames；系列化模板 → Remotion；否则 → sy-styles-20。拿不准就一句话说明理由后直接开工。
+- 用户点名哪个就用哪个；点名某种画风先查 `references/lemo-styles.md`，有就用 lemo-opuscar；没点名：素材/配音/URL/Figma → HyperFrames；系列化模板 → Remotion；要特定画风质感 → 从 lemo-opuscar 和 sy-styles-20 里各挑一两种给用户选；否则 → sy-styles-20。拿不准就一句话说明理由后直接开工。
 - 可以混搭：sy-styles-20 渲质感片段，作为素材放进 HyperFrames/Remotion。
 - **授权**：Remotion 个人和 ≤3 人公司免费商用，更大的营利公司要买 Company License，给公司做时开工前提一句。sy-styles-20（MIT）与 HyperFrames（Apache-2.0）无此限制。
 - HyperFrames 的找 BGM、云渲染需要 HeyGen 账号或 key，**不要主动登录或填 key**；本地 TTS、音效无需账号。
@@ -43,9 +44,11 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 1. **定规格 + 定配乐**：类型、主题、引擎、1920×1080 / 30fps / 16:9（竖屏 1080×1920）、配不配音（默认不配，中文字幕讲清楚）、时长、口径约束，写进项目 SPEC.md。**配乐最影响质感**：
    - 用户给了曲子就用；没给就按 `references/bgm-workflow.md` 去 Mixkit 等免费曲库挑 8–12 首候选，`tools/bgmcard.py` 生成试听页让用户挑（下载前告诉用户文件名、来源、大小并征得同意）。
    - 纯代码合成的配乐只作兜底（`tools/mixplan.py`），合成的高音“叮”容易刺耳。
+   - **写创意方案 `TREATMENT.md`**（`references/directing.md` §4）：先找 1–2 部对标作品，三种候选结构选一，分镜表、卡点图、声音设计表；开场 3 秒有钩子、结尾呼应开头、一个本风格独有的招式放在情绪最高点。
 2. **卡点**：`python -P <技能目录>/beats.py 配乐.mp3 beats.json` 得到 BPM、每拍、小节首拍、重音；`python <技能目录>/tools/keydetect.py 配乐.mp3` 测调。按小节能量找出前奏/Drop/桥段/结尾重音。规则：**配乐默认整首连续不剪**（可哥偏好），只选起点偏移让最重要的重拍落在片名上，结尾 4 秒左右长淡出；片名/重击对齐 `accents`/`onsets`（真实起音，不是拍格的小节首拍，否则会「双响」）；其余关键时刻用**分段时间映射**让画面去贴音乐（见 bgm-workflow.md 第 4 节），各段速度 0.85–1.25 倍，宁慢勿赶；叠化跟着乐句走，不必每拍都卡。按小节补剪音乐只作不得已的选项。
 3. **配音效**：**每个关键动作都要有声音**（元素出现、扫描、锁定、数据流、关卡、印章……），不要因为嫌吵就删掉。用了成品配乐时：有音高的音效一律吸附到配乐的调、柔和拨弦音色、降一个八度；全部低通去刺 + 短混响；关键时刻加低频重音，Drop 前加上升音；音效总线比音乐低 5–9 dB。`tools/mixbgm.py` 已实现这些规则。
 4. **试片，逐段推进**：先做开头 10 秒（still 抽帧 + 小样 mp4）给用户看，确认后再一段一段往下做；哪段不好只重做那段。用户明确说“一次做完”时可以整片做，但仍要先抽帧自查。
+   - 交付前按 `references/directing.md` §11 自查：字幕阅读时长（中文 字数÷4.5+1.5 秒）、至少两处静默、至少四种运镜、从模板改的片子和模板比六项至少四项不同；附 `CREDITS`。
 
 「Vibe 知识大赏」视觉范式（知识科普类可参考）：深蓝/近黑 + 金色；衬线大标题拉宽字距；点阵/细线图示；数字放大讲知识点；四角英文 HUD 小字；底部一行字幕关键词标黄；每幕一句诗意开场。
 
@@ -57,6 +60,18 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 - 单风格命令（在 `engines/sy-styles-20` 里）：`node make.js list | still 09 6.5 --hwgpu | style 09 --hwgpu | reel 03,09,11 mini | cues`。WebGL/3D 风格加 `--hwgpu`，纯 2D 走 `--nogpu`。
 - **Three.js（3D 实体）**：`lib/three.min.js` + `lib/three-reel.js`（`Reel.three`），模板 `templates/three-title`。抽象质感、光影材质继续用手写着色器；具体物体、文字、模型、相机路径用 Three.js。**写之前先读 `references/three.md`**（确定性规则、全局 THREE 冲突、地板发灰等坑）。
 - 新做场景：复制最接近的风格（2D：03-flat / 06-morph / 08-hud / 17-editorial；WebGL：09-collage / 18-ink；3D：11-bauhaus；等轴城市：02-isometric），引用 `<技能目录>/engines/sy-styles-20/lib/core.js`（相对路径即可）。
+
+## 引擎四：lemo-opuscar（157 种风格库）
+- 是什么：[lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar)（MIT，Lemomo）。59 种完整风格，每种有 `$LEMO/styles/<目录名>/STYLE.md` 风格卡（材质、配色、字体、运动、镜头语法、声音调色板、独有招式、坑、变化空间）和示例源码 `demo/`；另有 98 种 OPUSCAR 风格提示词（`$LEMO/styleboard/opuscar98_styles.json`，按编号取 `prompt_zh`、`blend_zh`、`shots`、`direction_zh`，没有源码）。中文目录见 `references/lemo-styles.md`。
+- 怎么做：读 `$LEMO/AGENTS.md`（流程）、`$LEMO/DIRECTOR.md`（我们的中文版在 `references/directing.md`）、`$LEMO/TECHNIQUE.md`、`$LEMO/core/README.md`。**STYLE.md 是不变量全部遵守，故事、结构、镜头全部按用户题材重新设计**；先写 `TREATMENT.md`，再看示例源码，只学技术不学故事。项目放 `D:\AI\claude视频制作\<项目名>`，不要在 `$LEMO/styles/` 里做。可哥的默认值优先于它的默认值（不配音、中文字幕、成品配乐整首连续、30fps）。
+- 页面契约（和 sy-styles-20 不同）：`window.DUR`、`window.render(t)`、`window.READY = true`；可选 `window.EV`（音效事件）、`window.TEXTS(t)`（屏幕文字和位置，给阅读时长检查用）。库文件用绝对路径 `/core/lib.js`、`/node_modules/three/build/three.module.js`。
+- 命令（Git Bash，在 `$LEMO` 里执行，项目用绝对路径）：
+  `node core/render/still.mjs <项目> 1.5 12 --range 0:50:2` 抽帧 → `node core/render/video.mjs <项目> --fps 30 --workers 6` 出画面 → `node core/render/events.mjs <项目>` 导出事件 → `node core/render/readcheck.mjs <项目>` **字幕阅读时长检查** → 混音（可以用我们的 `mixbgm.py`，cues 用 EV 转换；或它的 `core/audio/sfx.py`、`sampler.py` 真乐器采样）→ `sh core/render/mux.sh out/video.mp4 mix.wav 成片.mp4 30 2`（两遍响度标准化到 -14 LUFS + 胶片颗粒）。Python 用 `.venv/bin/python`（Windows 上是垫片，指向 `.venv/Scripts/python.exe`）。
+- Windows 实测（2026-10-28，RTX 4070）：抽帧、并行出片、事件导出、阅读时长检查、mux 全部可用；3D 积木示例的景深和材质和官方参考帧一致。注意：
+  - 示例里的字体和 HDRI 不在 git 里：HDRI 用 `sh tools/fetch.sh hdri`；字体按 TECHNIQUE.md §11 从 Google Fonts 下载到项目的 `fonts/`。示例源码本来就只供阅读，不是拿来直接渲的。
+  - 中文 Windows 控制台是 GBK，Python 打印 ✓ 等符号会报错：垫片已设 `PYTHONUTF8=1`；自己直接调 Python 时加 `-X utf8`。
+  - 配音（edge-tts 中文 + Kokoro 英文 + 自动转写校对）、真乐器采样库按需装：`.venv/bin/python -m pip install -r requirements-voice.txt`，`sh tools/fetch.sh instruments vsco2ce`（约 400MB，先问可哥）。
+- 交付按它的要求附 `CREDITS`（第三方素材、字体、乐器采样的来源和授权）；片子里不要出现 LemoLab 署名。
 
 ## 整片构建（tools/）
 新项目可直接 `node <技能目录>/tools/newproj.js <项目目录> --tpl three-title` 从模板生成（自动填引擎路径、music.json、render.args）。
