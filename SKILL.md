@@ -9,7 +9,7 @@ description: 视频任务总入口（优先于 hyperframes / remotion-* / lemo-o
 - `engines/sy-styles-20/`：随技能自带的 sy-styles-20 引擎（MIT，作者肖雄 XIAOXIONG，已修 Windows 盘符 bug）。首次使用前运行一次 `install.ps1` / `install.sh` 装依赖。
 - `beats.py`：卡点分析；`tools/`：整片构建（`build.js`，支持 `--jobs` 并行）、配乐混音（`mixbgm.py`）、换配乐不重渲（`rewarp.py`）、加封面不重渲（`addcover.py`）、素材（`assets.py`）、视频联系表（`contact.py`）、选曲、测调、模型转 glTF（`to_gltf.py`）。
 - `templates/`：项目模板（`three-title`：3D 中文片名；`three-multishot`：多镜头叠化 + 逐字字幕 + 年份滚轮 + 颗粒暗角），用 `tools/newproj.js` 新建；`blender-smash/scene.py`：Blender 刚体砸字 + 子弹时间招牌镜头。
-- `references/`：`directing.md`（**导演方法：对标、创意方案、声音、节奏、镜头、交付自查，所有引擎通用，开工前必读**）、`lemo-styles.md`（lemo-opuscar 157 种风格中文目录）、`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**开工前先读 directing.md；做完整片前先读 bgm-workflow.md 和 lessons.md。**
+- `references/`：`directing.md`（**导演方法：对标、创意方案、声音、节奏、镜头、交付自查，所有引擎通用，开工前必读**）、`composition.md`（**构图与光硬规则：主角 ≥1/4 帧高、空场判据、字幕最低字高**）、`review.md`（**独立评委打分流程，交付前必走**）、`motion-cards/`（验收过的动效卡，用卡必读参考源码）、`lemo-styles.md`（lemo-opuscar 157 种风格中文目录）、`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**开工前先读 directing.md；做完整片前先读 bgm-workflow.md 和 lessons.md。**
 - 视频项目放在用户自己的工作目录（例如 `D:\AI\claude视频制作\<项目名>`），不要放进技能目录。
 
 ## 第 0 步：选引擎
@@ -44,7 +44,7 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 1. **定规格 + 定配乐**：类型、主题、引擎、1920×1080 / 30fps / 16:9（竖屏 1080×1920）、配不配音（默认不配，中文字幕讲清楚）、时长、口径约束，写进项目 SPEC.md。**配乐最影响质感**：
    - 用户给了曲子就用；没给就按 `references/bgm-workflow.md` 去 Mixkit 等免费曲库挑 8–12 首候选，`tools/bgmcard.py` 生成试听页让用户挑（下载前告诉用户文件名、来源、大小并征得同意）。
    - 纯代码合成的配乐只作兜底（`tools/mixplan.py`），合成的高音“叮”容易刺耳。
-   - **写创意方案 `TREATMENT.md`**（`references/directing.md` §4）：先找 1–2 部对标作品，三种候选结构选一，分镜表、卡点图、声音设计表；开场 3 秒有钩子、结尾呼应开头、一个本风格独有的招式放在情绪最高点。
+   - **写创意方案 `TREATMENT.md`**（`references/directing.md` §4，构图按 `references/composition.md`；要用现成手法先查 `references/motion-cards/`）：先找 1–2 部对标作品，三种候选结构选一，分镜表、卡点图、声音设计表；开场 3 秒有钩子、结尾呼应开头、一个本风格独有的招式放在情绪最高点。
 2. **卡点**：`python -P <技能目录>/beats.py 配乐.mp3 beats.json` 得到 BPM、每拍、小节首拍、重音；`python <技能目录>/tools/keydetect.py 配乐.mp3` 测调。按小节能量找出前奏/Drop/桥段/结尾重音。规则：**配乐默认整首连续不剪**（可哥偏好），只选起点偏移让最重要的重拍落在片名上，结尾 4 秒左右长淡出；片名/重击对齐 `accents`/`onsets`（真实起音，不是拍格的小节首拍，否则会「双响」）；其余关键时刻用**分段时间映射**让画面去贴音乐（见 bgm-workflow.md 第 4 节），各段速度 0.85–1.25 倍，宁慢勿赶；叠化跟着乐句走，不必每拍都卡。按小节补剪音乐只作不得已的选项。
 3. **配音效**：**每个关键动作都要有声音**（元素出现、扫描、锁定、数据流、关卡、印章……），不要因为嫌吵就删掉。用了成品配乐时：有音高的音效一律吸附到配乐的调、柔和拨弦音色、降一个八度；全部低通去刺 + 短混响；关键时刻加低频重音，Drop 前加上升音；音效总线比音乐低 5–9 dB。`tools/mixbgm.py` 已实现这些规则。
 4. **试片，逐段推进**：先做开头 10 秒（still 抽帧 + 小样 mp4）给用户看，确认后再一段一段往下做；哪段不好只重做那段。用户明确说“一次做完”时可以整片做，但仍要先抽帧自查。
@@ -87,6 +87,7 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 只改声音不用重渲画面：重跑 `python <技能目录>/tools/mixbgm.py bgm.json out/cues.json out/music.wav`，再 `ffmpeg -i 片.mp4 -i out/music.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 256k 新片.mp4`。
 
 ## 自查（交付前必须）
+- **质量闸（每支片都要过）**：① `python -X utf8 <技能目录>/tools/frame_metrics.py x.mp4 [--sub 字幕带]` 没有空场、字幕字高达标（`references/composition.md`）；② 按 `references/review.md` 开干净上下文的 subagent 当评委打分，改一轮再评，**首检不交给可哥**；③ `references/lessons.md` 判例式准则逐条打 ✓/✗，写进项目 `REVIEW.md`。
 - 抽帧看开头 / 钩子 / 高潮 / 结尾（Read 看图）；整片拼带时间码的联系表：`python -X utf8 <技能目录>/tools/contact.py x.mp4 --every 6 --cols 5`，查重叠、出界、遮挡。（自己写 ffmpeg drawtext 时必须指定 fontfile，否则 Windows 上会段错误。）
 - 响度：`ffmpeg -i x.mp4 -af ebur128=peak=true -f null -`，目标 -14 ~ -16 LUFS，真峰值 ≤ -1 dBTP。
 - 对齐：关键时刻抽帧确认落在音乐重音上；`mixbgm.py` 输出里有「双响风险」提示就按提示挪 cue。
