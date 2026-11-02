@@ -34,3 +34,13 @@ ffmpeg -framerate 30 -start_number 0 -i frames/blender/f%05d.png -c:v libx264 -c
 - **IFC（BIM 模型）**：Blender 不自带 IFC 导入。用 IfcOpenShell 的 `IfcConvert model.ifc model.glb` 直接转；或者在 Blender 里装 Bonsai 扩展后再导入。
 - **RVT（Revit）**：只能先在 Revit 里导出 IFC 或 FBX；**DWG/DXF** 先转成 FBX/OBJ。
 - 转出来的 glb 用 `const g = (await R3.gltf('model.glb')).scene; R3.scene.add(g)`，自带材质会保留；需要统一质感时遍历 mesh 换成自己的 `MeshStandardMaterial`。
+
+## 实战经验（2026-11，此心光明第三季）
+- **竖屏相机**要设 `cam.data.sensor_fit = 'HORIZONTAL'`，否则 AUTO 把 36mm 套在高度上，横向视野窄得像长焦。
+- **EEVEE** 1080×1920、32 采样、带体积雾约 1.3 秒/帧（RTX 4070）。**多个 Blender 并行没有加速**（4 条队列总吞吐只有约 0.7 帧/秒），排一条队列即可。
+- **程序化人物**：几个椭球 join → 体素 Remesh（0.02）→ Smooth，逆光剪影很好用；正面打光像假人，只拍背影和剪影。
+- **火焰**：拉长的球 + 噪声纹理（Mapping 的位置随时间关键帧上移）× 竖向渐变，接 Transparent/Emission 混合，远好于发光圆锥。
+- **体积雾密度对尺度极敏感**：几百米的外景 0.003–0.006，室内 0.02–0.035。点光几百瓦就够，上万瓦会全片过曝。
+- **Displace** 修改器的 Blender 纹理 `noise_scale` 是特征尺寸（米）；喀斯特峰林用 VORONOI 距离 + 负强度、`noise_scale` 约 40。
+- 节点输入名可能带空格（`Mortar Size`）；BrickTexture 的 offset 是节点属性，不是输入口。
+- **Blender 写实底片 + 网页合成**（第三季在试的做法，还没验收）：Blender 出逐帧序列当「底片」，lemo / Three.js 页面按 t 读帧做纹理，底片之间用着色器做叠化、曝光烧白、噪声溶解，上面再叠 3D 层和后期。验收后会做成模板。

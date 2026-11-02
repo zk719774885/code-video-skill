@@ -33,3 +33,7 @@ setx PIXABAY_API_KEY "你的key"
 ```
 **Pexels**：pexels.com → 右上角 Join（邮箱或 Google 账号注册）→ 打开 pexels.com/api → 点 "Your API Key"，填一个简单表单（用途写 "personal video projects"）→ 页面直接显示 key。免费额度约每小时 200 次、每月 2 万次。
 **Pixabay**：pixabay.com → 右上角 Join（注册后去邮箱点验证链接）→ 登录状态下打开 pixabay.com/api/docs → 页面 "Parameters" 表格里 `key` 那一行就显示你的 key。免费额度每分钟 100 次。
+
+## 其他好用的公有领域数据
+- **古地图、路线图**：Natural Earth 1:50m 海岸线和河流（GitHub `nvkelso/natural-earth-vector` 的 geojson，公有领域），投影到画布上画成墨线古地图，路线用 Three.js `TubeGeometry` + `setDrawRange` 生长，比手画示意图真实得多。
+- **扫描史料变成墨**：古籍、图版按亮度转成墨的透明度（`alpha = clamp((0.78 - lum) / 0.5)`，边缘渐隐），画进水墨画面的墨层，就像真迹渗进宣纸，和代码画的画面完全统一。暗底上的字幕可以用 `destination-out` 从墨里「挖」出留白字，比直接写白字自然。

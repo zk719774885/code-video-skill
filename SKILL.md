@@ -9,7 +9,7 @@ description: 视频任务总入口（优先于 hyperframes / remotion-* / lemo-o
 - `engines/sy-styles-20/`：随技能自带的 sy-styles-20 引擎（MIT，作者肖雄 XIAOXIONG，已修 Windows 盘符 bug）。首次使用前运行一次 `install.ps1` / `install.sh` 装依赖。
 - `beats.py`：卡点分析；`tools/`：整片构建（`build.js`，支持 `--jobs` 并行）、配乐混音（`mixbgm.py`）、换配乐不重渲（`rewarp.py`）、加封面不重渲（`addcover.py`）、素材（`assets.py`）、视频联系表（`contact.py`）、选曲、测调、模型转 glTF（`to_gltf.py`）。
 - `templates/`：项目模板（`three-title`：3D 中文片名；`three-multishot`：多镜头叠化 + 逐字字幕 + 年份滚轮 + 颗粒暗角），用 `tools/newproj.js` 新建；`blender-smash/scene.py`：Blender 刚体砸字 + 子弹时间招牌镜头。
-- `references/`：`directing.md`（**导演方法：对标、创意方案、声音、节奏、镜头、交付自查，所有引擎通用，开工前必读**）、`composition.md`（**构图与光硬规则：主角 ≥1/4 帧高、空场判据、字幕最低字高**）、`review.md`（**独立评委打分流程，交付前必走**）、`motion-cards/`（验收过的动效卡，用卡必读参考源码）、`lemo-styles.md`（lemo-opuscar 157 种风格中文目录）、`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**开工前先读 directing.md；做完整片前先读 bgm-workflow.md 和 lessons.md。**
+- `references/`：`voice.md`（**配音：火山 seed-audio 旁白、逐字时间戳对齐、配乐自动压低**）、`directing.md`（**导演方法：对标、创意方案、声音、节奏、镜头、交付自查，所有引擎通用，开工前必读**）、`composition.md`（**构图与光硬规则：主角 ≥1/4 帧高、空场判据、字幕最低字高**）、`review.md`（**独立评委打分流程，交付前必走**）、`motion-cards/`（验收过的动效卡，用卡必读参考源码）、`lemo-styles.md`（lemo-opuscar 157 种风格中文目录）、`bgm-workflow.md`（成品配乐 + 卡点 + 动效音效全流程）、`three.md`（Three.js 3D 用法、光强参考值、多镜头叠化、档案卡片）、`blender.md`（Blender 无头渲染招牌镜头、模型转 glTF）、`assets.md`（图像/视频素材：Commons、Pexels、Pixabay 搜索下载与授权）、`viral-study.md`（抖音爆款 Claude 视频逐帧拆解：真实感三路线、转场清单、提示词模板）、`lessons.md`（实战经验）、`xiaofeng-method.md`（小冯不意why「Vibe 知识大赏」教程整理）。**开工前先读 directing.md；做完整片前先读 bgm-workflow.md 和 lessons.md。**
 - 视频项目放在用户自己的工作目录（例如 `D:\AI\claude视频制作\<项目名>`），不要放进技能目录。
 
 ## 第 0 步：选引擎
@@ -41,7 +41,7 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
 ## 四步法（不管选哪个引擎都适用；来自小冯不意why 教程，详见 references/xiaofeng-method.md）
 **接到做视频的任务，默认按四步走，不要一口气生成整片。**
 
-1. **定规格 + 定配乐**：类型、主题、引擎、1920×1080 / 30fps / 16:9（竖屏 1080×1920）、配不配音（默认不配，中文字幕讲清楚）、时长、口径约束，写进项目 SPEC.md。**配乐最影响质感**：
+1. **定规格 + 定配乐**：类型、主题、引擎、1920×1080 / 30fps / 16:9（竖屏 1080×1920）、配不配音（按用户对这个项目的偏好：国学系列默认女声旁白，其他默认不配、中文字幕讲清楚；配音读 `references/voice.md`，`tools/narr.py` 生成、`tools/align.py` 对齐到逐字时间）、时长、口径约束，写进项目 SPEC.md。**配乐最影响质感**：
    - 用户给了曲子就用；没给就按 `references/bgm-workflow.md` 去 Mixkit 等免费曲库挑 8–12 首候选，`tools/bgmcard.py` 生成试听页让用户挑（下载前告诉用户文件名、来源、大小并征得同意）。
    - 纯代码合成的配乐只作兜底（`tools/mixplan.py`），合成的高音“叮”容易刺耳。
    - **写创意方案 `TREATMENT.md`**（`references/directing.md` §4，构图按 `references/composition.md`；要用现成手法先查 `references/motion-cards/`）：先找 1–2 部对标作品，三种候选结构选一，分镜表、卡点图、声音设计表；开场 3 秒有钩子、结尾呼应开头、一个本风格独有的招式放在情绪最高点。
@@ -71,6 +71,7 @@ npm run dev / npm run check / npm run render ; npx hyperframes beats 音乐.mp3 
   - 示例里的字体和 HDRI 不在 git 里：HDRI 用 `sh tools/fetch.sh hdri`；字体按 TECHNIQUE.md §11 从 Google Fonts 下载到项目的 `fonts/`。示例源码本来就只供阅读，不是拿来直接渲的。
   - 中文 Windows 控制台是 GBK，Python 打印 ✓ 等符号会报错：垫片已设 `PYTHONUTF8=1`；自己直接调 Python 时加 `-X utf8`。
   - 配音（edge-tts 中文 + Kokoro 英文 + 自动转写校对）、真乐器采样库按需装：`.venv/bin/python -m pip install -r requirements-voice.txt`，`sh tools/fetch.sh instruments vsco2ce`（约 400MB，先问可哥）。
+- 做系列、做竖屏、加封面：见 `references/lemo-styles.md`「做系列 / 做竖屏」。
 - 交付按它的要求附 `CREDITS`（第三方素材、字体、乐器采样的来源和授权）；片子里不要出现 LemoLab 署名。
 
 ## 整片构建（tools/）

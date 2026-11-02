@@ -3,6 +3,9 @@ bgm.json：{"music": "配乐.mp3", "edit": [[2.1, null]], "total": 95.6, "key": 
   - edit：默认只写一段 [[起点, null]]＝整首连续、只选起点偏移（可哥偏好，听着不断）；
     按小节拼接 [[0, 15.02], [7.59, 15.02], [15.02, null]] 只作不得已的选项，一次最多一个接口；
   - fade_in / fade_out：开头淡入、结尾淡出秒数（默认 0 / 1.2；整首连续时结尾建议 4 秒左右）；
+  - voice：旁白 wav（tools/narr.py 生成）；voice_offset：旁白在成片里的起点秒数（开头有封面就写封面时长）；
+    voice_json：align.py 生成的 voice.json（给了就把最后一句之后多余的呢喃截掉）；voice_over_db：旁白比配乐高几 dB（默认 9）；
+    duck_db：旁白说话时配乐压低几 dB（默认 7）。见 references/voice.md；
   - lufs：成片目标响度（默认 -15）。末端是"整体测响度 → 一次性静态增益 → 限幅"，不用 loudnorm（它是动态增益，音乐会忽大忽小）；
   - key：配乐的调（tools/bgmcard.py 或 references/bgm-workflow.md 里的测调脚本可测），所有有音高的音效都吸附到该调的五声音阶并降一个八度；
   - sfx_db：音效总线相对音乐的电平（推荐 -5 ~ -9）。
@@ -26,6 +29,7 @@ KEY = CFG.get('key', 'C minor')
 SFX_DB = CFG.get('sfx_db', -5)
 FADE_IN, FADE_OUT = CFG.get('fade_in', 0), CFG.get('fade_out', 1.2)
 LUFS = CFG.get('lufs', -15)
+VOICE = CFG.get('voice')
 rng = np.random.default_rng(11)
 
 def n(t): return int(round(t * SR))
@@ -141,6 +145,9 @@ def main():
     pk = np.abs(fx).max(); print('fx peak', round(float(pk), 3))
     if pk > 1.2: fx = np.tanh(fx / 1.2) * 1.2      # 只软削极少数尖峰，不再整体压低
     mix = music + fx
+    if VOICE:
+        voice, duck = voice_track(music, L)
+        mix = music * duck[:, None] + fx + voice
     tmp = sys.argv[3] + '.pre.wav'
     wavfile.write(tmp, SR, mix.astype(np.float32))
     # 静态增益：整体测一次响度，整条乘同一个增益，再用限幅器只挡真峰值（不改变音乐的起伏）
@@ -151,6 +158,33 @@ def main():
                     '-c:a', 'pcm_s16le', '-ar', str(SR), sys.argv[3]], check=True)
     os.remove(tmp)
     print('wrote', sys.argv[3], f'{TOTAL}s', f'原始 {I:.1f} LUFS → 增益 {gain:+.1f} dB')
+
+
+def voice_track(music, L):
+    """旁白：高通 + 压缩 + 截掉尾巴，电平按配乐定；返回 (立体声旁白, 配乐压低曲线)。"""
+    base = os.path.dirname(os.path.abspath(sys.argv[1]))
+    vo = load(os.path.join(base, VOICE)).mean(1)
+    off = CFG.get('voice_offset', 0)
+    if CFG.get('voice_json'):   # 模型常在最后一句之后继续念：截到最后一句结束 +0.35 秒，0.25 秒淡出
+        vj = json.load(open(os.path.join(base, CFG['voice_json']), encoding='utf-8-sig'))
+        cut = n(vj['lines'][-1]['t1'] - vj.get('offset', 0) + 0.35)
+        if cut < len(vo):
+            vo = vo[:cut + n(0.25)].copy(); vo[cut:] *= np.linspace(1, 0, len(vo) - cut)
+    vo = hp(vo, 90)
+    blk = 240; env = np.abs(vo); pk = np.maximum.reduceat(env, np.arange(0, len(env), blk)); sm = np.zeros_like(pk); e = 0.0
+    rel = np.exp(-1 / (0.12 * SR)) ** blk
+    for i, p in enumerate(pk): e = p if p > e else e * rel; sm[i] = e
+    thr = 0.18 * pk.max(); gain = np.where(sm > thr, (thr + (sm - thr) / 3) / np.maximum(sm, 1e-9), 1.0)
+    vo = vo * np.repeat(gain, blk)[:len(vo)]
+    v = np.zeros(L); k = n(off); seg = vo[:max(0, L - k)]; v[k:k + len(seg)] = seg
+    rms = lambda x: float(np.sqrt(np.mean(x[np.abs(x) > 1e-4] ** 2))) if np.any(np.abs(x) > 1e-4) else 1e-9
+    v *= rms(music.mean(1)) * 10 ** (CFG.get('voice_over_db', 9) / 20) / rms(v)
+    b = n(0.02); on = np.maximum.reduceat(np.abs(v), np.arange(0, L, b)) > 0.1 * np.abs(v).max()
+    s, sm2 = 0.0, np.zeros(len(on))
+    for i, o in enumerate(on): s = s + (1 - s) * 0.25 if o else s * 0.93; sm2[i] = s
+    duck = 10 ** (-CFG.get('duck_db', 7) * np.repeat(sm2, b)[:L] / 20)
+    print(f'旁白：{len(vo) / SR:.1f}s，起点 {off}s，比配乐高 {CFG.get("voice_over_db", 9)} dB，说话时配乐压低 {CFG.get("duck_db", 7)} dB')
+    return np.stack([v, v], 1), duck
 
 
 HEAVY = {'impact', 'impact_soft', 'boom', 'stamp', 'bonk', 'tail'}

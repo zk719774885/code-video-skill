@@ -82,3 +82,9 @@ render(t) {
 ## 选 Three.js 还是 HyperFrames 的 three 适配器
 - 画面主体是 3D、要 sy-styles-20 的运动模糊 / cues 音效 / tools 一条命令出片 → 这里的 `Reel.three`。
 - 3D 只是一层，叠在录屏、配音、字幕、HTML 组件上 → HyperFrames，读 `hyperframes-animation` 的 `adapters/three.md`（它用 `hf-seek` 事件驱动）。
+
+## 竖屏（1080×1920）
+- **视角**：竖屏的水平视角只有垂直 fov 的 0.56 倍左右。默认 fov 用 **44–46**（横屏常用的 32 会让 2 米宽的物体退到 8 米外，否则全片裁边）；主体宽度不超过「0.47 × 相机到主体的距离」。
+- **安全区**：下方约 25% 留给字幕和抖音的标题文案，主体中心放在画面 40% 高度附近；抖音主页按 3:4 裁封面，封面字放在画面中部。
+- **字幕层**：页面里后加的 canvas 会盖住先加的字幕 div，字幕层要显式 `z-index`，或者直接画在 2D 合成画布上（`motion-cards/multishot-crossfade.md`）。
+- **白纸、地图贴图**在主光下很容易过曝：纸类材质 `color` 压到 `0x9a948a` 左右，再靠灯光提亮。
